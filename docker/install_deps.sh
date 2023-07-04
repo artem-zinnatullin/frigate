@@ -4,6 +4,7 @@ set -euxo pipefail
 
 apt-get -qq update
 
+# TODO: move all apt-get installs to dedicated script for having it in a single Docker layer = performance of reruns.
 apt-get -qq install --no-install-recommends -y \
     apt-transport-https \
     gnupg \
@@ -17,8 +18,9 @@ apt-get -qq install --no-install-recommends -y \
 mkdir -p -m 600 /root/.gnupg
 
 # add coral repo
-wget --quiet -O /usr/share/keyrings/google-edgetpu.gpg https://packages.cloud.google.com/apt/doc/apt-key.gpg
-echo "deb [signed-by=/usr/share/keyrings/google-edgetpu.gpg] https://packages.cloud.google.com/apt coral-edgetpu-stable main" | tee /etc/apt/sources.list.d/coral-edgetpu.list
+curl -fsSLo - https://packages.cloud.google.com/apt/doc/apt-key.gpg | \
+    gpg --dearmor -o /etc/apt/trusted.gpg.d/google-cloud-packages-archive-keyring.gpg
+echo "deb https://packages.cloud.google.com/apt coral-edgetpu-stable main" | tee /etc/apt/sources.list.d/coral-edgetpu.list
 echo "libedgetpu1-max libedgetpu/accepted-eula select true" | debconf-set-selections
 
 # enable non-free repo
@@ -47,6 +49,13 @@ if [[ "${TARGETARCH}" == "arm" ]]; then
 fi
 
 # ffmpeg -> arm64
+if command -v ffmpeg >/dev/null 2>&1; then
+    HAS_FFMPEG=1
+else
+    HAS_FFMPEG=0
+fi
+
+if [[ "${HAS_FFMPEG}" == 0 ]]; then
 if [[ "${TARGETARCH}" == "arm64" ]]; then
     # add raspberry pi repo
     gpg --no-default-keyring --keyring /usr/share/keyrings/raspbian.gpg --keyserver keyserver.ubuntu.com --recv-keys 82B129927FA3303E
@@ -54,6 +63,8 @@ if [[ "${TARGETARCH}" == "arm64" ]]; then
     apt-get -qq update
     apt-get -qq install --no-install-recommends --no-install-suggests -y ffmpeg
 fi
+fi
+
 
 # arch specific packages
 if [[ "${TARGETARCH}" == "amd64" ]]; then
