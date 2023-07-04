@@ -54,10 +54,6 @@ else
     HAS_FFMPEG=0
 fi
 
-if [[ "${HAS_FFMPEG}" == 1 ]]; then
-# To avoid possible race condition.
-    apt -y remove ffmpeg
-fi
 # Compile ffmpeg
 
 cd /tmp
@@ -106,6 +102,12 @@ PKG_CONFIG_PATH="/usr/local/lib/pkgconfig" ./configure \
     --enable-hardcoded-tables
 
 make -j$(nproc)
+
+if [[ "${HAS_FFMPEG}" == 1 ]]; then
+# To avoid possible race condition.
+    apt -y remove ffmpeg
+fi
+
 make install
 ldconfig
 
