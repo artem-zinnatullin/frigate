@@ -150,6 +150,8 @@ def get_ort_providers(
     providers = []
     options = []
 
+    logger.info(f"ARTEM get_available_providers: {ort.get_available_providers()}")
+
     for provider in ort.get_available_providers():
         if provider == "CUDAExecutionProvider":
             device_id = 0 if not device.isdigit() else int(device)
