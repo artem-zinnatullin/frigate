@@ -169,6 +169,7 @@ def get_ort_providers(
                     "enable_gpu_mem_arena": True,
                 }
             )
+            break
         elif provider == "TensorrtExecutionProvider":
             # TensorrtExecutionProvider uses too much memory without options to control it
             # so it is not enabled by default
