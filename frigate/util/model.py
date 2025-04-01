@@ -162,6 +162,13 @@ def get_ort_providers(
                     "device_id": device_id,
                 }
             )
+        elif provider == "MIGraphXExecutionProvider":
+            providers.append(provider)
+            options.append(
+                {
+                    "enable_gpu_mem_arena": True,
+                }
+            )
         elif provider == "TensorrtExecutionProvider":
             # TensorrtExecutionProvider uses too much memory without options to control it
             # so it is not enabled by default

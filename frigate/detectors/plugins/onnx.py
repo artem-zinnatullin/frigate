@@ -47,6 +47,8 @@ class ONNXDetector(DetectionApi):
             detector_config.device == "CPU", detector_config.device
         )
 
+        logger.info(f"ONNX: ARTEM got ort providers: {providers}, and options: {options}")
+
         self.model = ort.InferenceSession(
             path, providers=providers, provider_options=options
         )
