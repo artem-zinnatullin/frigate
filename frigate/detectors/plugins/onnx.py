@@ -49,8 +49,16 @@ class ONNXDetector(DetectionApi):
 
         logger.info(f"ONNX: ARTEM got ort providers: {providers}, and options: {options}")
 
+        session_options = ort.SessionOptions()
+        # Override dynamic input dimensions with static values for MIGraphX
+        session_options.add_free_dimension_override_by_name("N", 1)
+        session_options.add_free_dimension_override_by_name("unk__480", 1)
+
         self.model = ort.InferenceSession(
-            path, providers=providers, provider_options=options
+            path_or_bytes=path,
+            providers=providers,
+            provider_options=options,
+            sess_options=session_options,
         )
 
         self.h = detector_config.model.height
@@ -64,6 +72,10 @@ class ONNXDetector(DetectionApi):
 
     def detect_raw(self, tensor_input: np.ndarray):
         if self.onnx_model_type == ModelTypeEnum.dfine:
+            # Ensure input dtype is float32 (model expects this)
+            if tensor_input.dtype != np.float32:
+                tensor_input = tensor_input.astype(np.float32)
+
             tensor_output = self.model.run(
                 None,
                 {
