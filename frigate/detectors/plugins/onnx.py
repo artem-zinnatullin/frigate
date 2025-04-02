@@ -1,4 +1,9 @@
 import logging
+import os
+import time
+import hashlib
+import tempfile
+import shutil
 
 import numpy as np
 from pydantic import Field
@@ -41,38 +46,66 @@ class ONNXDetector(DetectionApi):
             raise
 
         path = detector_config.model.path
-        logger.info(f"ONNX: loading {detector_config.model.path}")
+        logger.info(f"ONNX: loading {path}")
 
         providers, options = get_ort_providers(
             detector_config.device == "CPU", detector_config.device
         )
 
-        logger.info(f"ONNX: ARTEM got ort providers: {providers}, and options: {options}")
+        logger.info(f"ONNX: got ort providers: {providers}, and options: {options}")
 
         session_options = ort.SessionOptions()
         # Override dynamic input dimensions with static values for MIGraphX
         session_options.add_free_dimension_override_by_name("N", 1)
         session_options.add_free_dimension_override_by_name("unk__480", 1)
 
+        # Compute SHA256 of the model file to support model file updates.
+        with open(path, "rb") as f:
+            sha256 = hashlib.sha256(f.read()).hexdigest()
+        model_cache_path = f"{path}.{sha256}.ortcache"
+        session_options.optimized_model_filepath = model_cache_path
+        session_options.enable_profiling = False
+
+        if os.path.exists(model_cache_path):
+            session_options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_DISABLE_ALL
+            logger.info(f"ONNX: Loading optimized model from cache: {model_cache_path}")
+        else:
+            logger.info(f"ONNX: No optimized model cache found. Will save to: {model_cache_path}")
+
+        # Use a temp file to avoid concurrency issues
+        tmp_cache_path = None
+        if not os.path.exists(model_cache_path):
+            tmp_cache_fd, tmp_cache_path = tempfile.mkstemp(suffix=".ortcache")
+            os.close(tmp_cache_fd)
+            session_options.optimized_model_filepath = tmp_cache_path
+
+        start = time.time()
         self.model = ort.InferenceSession(
             path_or_bytes=path,
             providers=providers,
             provider_options=options,
             sess_options=session_options,
         )
+        logger.info(f"ONNX: Session created in {time.time() - start:.2f}s")
+        logger.info(f"ONNX: providers active: {self.model.get_providers()}")
+
+        if tmp_cache_path and os.path.exists(tmp_cache_path):
+            try:
+                shutil.move(tmp_cache_path, model_cache_path)
+                logger.info(f"ONNX: Cache saved to {model_cache_path}")
+            except Exception as e:
+                logger.warning(f"ONNX: Failed to move cache file: {e}")
 
         self.h = detector_config.model.height
         self.w = detector_config.model.width
         self.onnx_model_type = detector_config.model.model_type
         self.onnx_model_px = detector_config.model.input_pixel_format
         self.onnx_model_shape = detector_config.model.input_tensor
-        path = detector_config.model.path
 
         logger.info(f"ONNX: {path} loaded")
 
     def detect_raw(self, tensor_input: np.ndarray):
         if self.onnx_model_type == ModelTypeEnum.dfine:
-            # Ensure input dtype is float32 (model expects this)
             if tensor_input.dtype != np.float32:
                 tensor_input = tensor_input.astype(np.float32)
 
